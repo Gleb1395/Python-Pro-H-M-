@@ -14,6 +14,8 @@ from webargs import fields, validate
 from webargs.flaskparser import use_kwargs
 import httpx
 import csv
+from formatter import format_records, transform_time
+from database_handler import execute_query
 
 app = Flask(__name__)
 
@@ -102,6 +104,45 @@ def get_bitcoin_value(currency: str, convert: int):
 
     return (f'{convert} {symbol_btc} <---->  BTC<br>'
             f'{converter} {symbol} <---->  {currency}')
+
+
+@app.route("/order-price")
+@use_kwargs(
+    {
+        'country': fields.Str(
+            load_default='BillingCountry'
+        )
+    },
+    location='query'
+)
+def order_price(country: str):
+    query = (f'SELECT BillingCountry, sum(UnitPrice) '
+             f'FROM invoices JOIN invoice_items ON invoices.InvoiceId = invoice_items.InvoiceId '
+             f'GROUP BY BillingCountry HAVING BillingCountry = "{country}"')
+    result = execute_query(query=query)
+    return format_records(result)
+
+
+@app.route("/get-all-info-about-track")
+def get_all_info_about_track():
+    query = (f'SELECT albums."AlbumId", albums."Title", SUM(tracks.Milliseconds / 1000 / 3600.0) as SUM '
+             f'FROM playlist_track '
+             f'JOIN playlists ON playlist_track.PlaylistId = playlists.PlaylistId '
+             f'JOIN tracks ON playlist_track.TrackId = tracks.TrackId '
+             f'JOIN media_types ON media_types.MediaTypeId = tracks.MediaTypeId '
+             f'JOIN genres ON genres.GenreId = tracks.GenreId '
+             f'JOIN albums ON albums.AlbumId = tracks.AlbumId '
+             f'JOIN artists ON artists.ArtistId = albums.ArtistId '
+             f'JOIN invoice_items ON tracks.TrackId = invoice_items.TrackId'
+             f' JOIN invoices ON invoice_items.InvoiceId = invoices.InvoiceId '
+             f'JOIN customers ON customers.CustomerId = invoices.CustomerId '
+             f'JOIN employees ON employees.EmployeeId = customers.SupportRepId '
+             f'GROUP BY albums.AlbumId, albums.Title;')
+    result = execute_query(query=query)
+    return transform_time(result)
+
+
+
 
 
 if __name__ == '__main__':
