@@ -14,7 +14,7 @@ from webargs import fields, validate
 from webargs.flaskparser import use_kwargs
 import httpx
 import csv
-from formatter import format_records, transform_time
+from formatter import format_records, transform_time, format_for_stutus_city
 from database_handler import execute_query
 
 app = Flask(__name__)
@@ -141,8 +141,30 @@ def get_all_info_about_track():
     result = execute_query(query=query)
     return transform_time(result)
 
-
-
+@app.route("/stats-by-city")
+@use_kwargs(
+    {
+        'ganre': fields.Str(
+            load_default='Jazz'
+        )
+    },
+    location='query'
+)
+def stats_by_city(ganre: str):
+    query = (f'SELECT '
+             f'genres."Name" as Ganre, invoices."BillingCity" as City, '
+             f'invoices."BillingCountry" as Country, count(genres."Name") as listen '
+             f'FROM tracks '
+             f'JOIN genres ON tracks."GenreId" = genres."GenreId" '
+             f'JOIN invoice_items ON tracks."TrackId" = invoice_items."InvoiceId" '
+             f'JOIN invoices ON invoice_items."InvoiceId" = invoices."InvoiceId" '
+             f'GROUP BY genres."Name", invoices."BillingCity", invoices."BillingCountry" HAVING genres."Name" = "{ganre}" '
+             f'ORDER BY listen DESC LIMIT 1;')
+    result = execute_query(query=query)
+    if result:
+        return format_for_stutus_city(result)
+    else:
+        return 'Sorry, the genre listed is not auditioned anywhere in the database.'
 
 
 if __name__ == '__main__':
